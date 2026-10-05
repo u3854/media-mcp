@@ -229,8 +229,23 @@ def load_pack(
         )
         tools.append(tool)
 
+    system_prompt: str | None = None
+    prompt_file = pack_dir / "system_prompt.txt"
+    if prompt_file.is_file():
+        try:
+            system_prompt = prompt_file.read_text(encoding="utf-8").strip()
+            logger.info("Loaded system prompt for pack '%s' (%d chars)", manifest.name, len(system_prompt))
+        except Exception as e:
+            logger.warning("Failed to read system_prompt.txt in %s: %s", pack_dir, e)
+
     logger.info("Loaded pack '%s' (%d actions) from %s", manifest.name, len(tools), pack_dir)
-    return LoadedPack(manifest=manifest, root_dir=pack_dir, media_dir=media_dir, tools=tools)
+    return LoadedPack(
+        manifest=manifest,
+        root_dir=pack_dir,
+        media_dir=media_dir,
+        tools=tools,
+        system_prompt=system_prompt,
+    )
 
 
 def discover_all_packs(

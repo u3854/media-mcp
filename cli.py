@@ -93,12 +93,23 @@ def handle_create(args: argparse.Namespace) -> int:
                 "Refer to them by filename in pack.json (e.g. 'attack.webp').\n"
             )
 
+    # Add starter system_prompt.txt
+    prompt_path = target_dir / "system_prompt.txt"
+    if not prompt_path.exists():
+        with open(prompt_path, "w", encoding="utf-8") as f:
+            f.write(
+                f"You have access to interactive media tools from the '{pack_name}' action pack.\n"
+                f"When appropriate, call the provided action tools to display animations and reaction clips inline.\n"
+            )
+
     sys.stderr.write(f"✓ Created action pack '{pack_name}' at {target_dir}\n")
     sys.stderr.write(f"  - Manifest: {manifest_path}\n")
     sys.stderr.write(f"  - Media directory: {media_dir}\n")
+    sys.stderr.write(f"  - System prompt: {prompt_path}\n")
     sys.stderr.write("\nNext steps:\n")
     sys.stderr.write("  1. Add WebP images to the media/ folder (e.g. attack.webp, defend.webp)\n")
-    sys.stderr.write(f"  2. Validate your pack: python cli.py validate {target_dir}\n")
+    sys.stderr.write("  2. Customize system_prompt.txt with model instructions\n")
+    sys.stderr.write(f"  3. Validate your pack: python cli.py validate {target_dir}\n")
     return 0
 
 
@@ -126,8 +137,18 @@ def handle_validate(args: argparse.Namespace) -> int:
             sys.stderr.write(f"  - {err}\n")
         return 1
 
+    prompt_file = target_dir / "system_prompt.txt"
+    prompt_info = "Not present"
+    if prompt_file.is_file():
+        try:
+            content_len = len(prompt_file.read_text(encoding="utf-8").strip())
+            prompt_info = f"Present ({content_len} chars)"
+        except Exception:
+            prompt_info = "Present (unreadable)"
+
     sys.stderr.write(f"✓ Pack '{manifest.name}' (v{manifest.version}) is valid!\n")
     sys.stderr.write(f"  Description: {manifest.description or '(No description)'}\n")
+    sys.stderr.write(f"  System Prompt: {prompt_info}\n")
     sys.stderr.write(f"  Actions ({len(manifest.actions)}):\n")
     for act in manifest.actions:
         param_summary = ", ".join(

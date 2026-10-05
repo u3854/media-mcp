@@ -94,7 +94,20 @@ def main() -> None:
         pack_mounts=mounts,
         host="0.0.0.0",
         port=port,
+        loaded_packs=loaded_packs,
     )
+
+    # Print startup banner to sys.stderr (keeps MCP stdio JSON-RPC clean)
+    banner = f"""
+==============================================================
+🚀 Media MCP Server Ready
+   • Media Dashboard & Prompt: http://{host}:{bound_port}/
+   • Raw System Prompt:       http://{host}:{bound_port}/prompt
+   • llama-server WebUI:      http://{host}:8080/
+==============================================================
+"""
+    sys.stderr.write(banner)
+    sys.stderr.flush()
 
     # 5. Initialize MCP Server and register tools
     mcp = MCPServer("MediaActionTools")
