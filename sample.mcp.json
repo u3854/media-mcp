@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+        "media-actions": {
+            "command": "/path/to/media-mcp/.venv/bin/python",
+            "args": [
+                "/path/to/media-mcp/tools.py",
+                "--packs-dir", "/path/to/my-action-packs",
+                "--pack", "/path/to/individual-pack"
+            ]
+        }
+    }
+}

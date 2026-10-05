@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv/
+ 
+# Local media and action packs
+.media/
+packs/
+*.webp
+*.gif
+*.png
+*.jpg
+*.jpeg
+*.mp4
+*.mp3
+
+# User-specific MCP config
+mcp.json
+!sample.mcp.json
+
+.DS_Store
