@@ -75,6 +75,18 @@ def is_port_available(host: str, port: int) -> bool:
             return False
 
 
+def is_media_server_running(host: str = "127.0.0.1", port: int = 8088) -> bool:
+    """Check if a Media-MCP server is already running and healthy on the given port."""
+    import urllib.request
+    try:
+        url = f"http://{host}:{port}/healthz"
+        req = urllib.request.Request(url, headers={"User-Agent": "MediaMCPHealthCheck"})
+        with urllib.request.urlopen(req, timeout=0.5) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
 def find_available_port(start_port: int | None = None, max_attempts: int = 20) -> int:
     """Find an available port starting from start_port (or MEDIA_PORT env var, default 8088)."""
     if start_port is None:

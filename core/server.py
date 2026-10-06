@@ -52,9 +52,13 @@ def render_dashboard_html(loaded_packs: dict[str, Any]) -> str:
     for pack_name, pack in loaded_packs.items():
         for action in pack.manifest.actions:
             media_files = action.get_media_files()
-            first_media = media_files[0] if media_files else ""
-            media_url = f"/{pack_name}/{first_media}" if first_media else ""
-            alt_text = action.alt or action.name
+            files_html = []
+            for mf in media_files:
+                file_url = f"/{pack_name}/{mf}"
+                files_html.append(
+                    f'<a href="{html.escape(file_url)}" target="_blank" class="card-file" title="View file {html.escape(mf)}">📄 <code>{html.escape(mf)}</code> ↗</a>'
+                )
+            files_rendered = " ".join(files_html) if files_html else '<span class="card-file-none">None</span>'
 
             params_html = ""
             if action.parameters:
@@ -68,12 +72,15 @@ def render_dashboard_html(loaded_packs: dict[str, Any]) -> str:
 
             card = f"""
             <div class="action-card">
-              <div class="card-media">
-                <img src="{html.escape(media_url)}" alt="{html.escape(alt_text)}" loading="lazy" />
-              </div>
               <div class="card-body">
-                <span class="card-badge">{html.escape(pack_name)}</span>
+                <div class="card-header-row">
+                  <span class="card-badge">{html.escape(pack_name)}</span>
+                </div>
                 <h3 class="card-title">{html.escape(action.name)}</h3>
+                <div class="card-filename-row">
+                  <span class="file-label">File:</span>
+                  {files_rendered}
+                </div>
                 <p class="card-desc">{html.escape(action.description or 'No description provided.')}</p>
                 {params_html}
               </div>
@@ -253,26 +260,17 @@ def render_dashboard_html(loaded_packs: dict[str, Any]) -> str:
       border-color: #3b82f6;
       transform: translateY(-2px);
     }}
-    .card-media {{
-      background-color: #070a12;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 200px;
-      max-height: 240px;
-      overflow: hidden;
-      border-bottom: 1px solid var(--border);
-    }}
-    .card-media img {{
-      max-width: 100%;
-      max-height: 240px;
-      object-fit: contain;
-    }}
     .card-body {{
       padding: 1.25rem;
       display: flex;
       flex-direction: column;
       flex-grow: 1;
+    }}
+    .card-header-row {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.4rem;
     }}
     .card-badge {{
       display: inline-block;
@@ -281,16 +279,60 @@ def render_dashboard_html(loaded_packs: dict[str, Any]) -> str:
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: #818cf8;
-      margin-bottom: 0.4rem;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      padding: 0.15rem 0.5rem;
+      border-radius: 0.375rem;
     }}
     .card-title {{
-      font-size: 1.1rem;
+      font-size: 1.15rem;
       font-weight: 600;
-      margin-bottom: 0.5rem;
+      color: #f8fafc;
+      margin-bottom: 0.4rem;
+    }}
+    .card-filename-row {{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.85rem;
+    }}
+    .file-label {{
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.8rem;
+    }}
+    .card-file {{
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      color: #38bdf8;
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.375rem;
+      text-decoration: none;
+      font-size: 0.8rem;
+      transition: all 0.15s ease;
+    }}
+    .card-file:hover {{
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+      text-decoration: underline;
+    }}
+    .card-file code {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }}
+    .card-file-none {{
+      color: var(--text-muted);
+      font-style: italic;
+      font-size: 0.8rem;
     }}
     .card-desc {{
       font-size: 0.875rem;
       color: var(--text-muted);
+      line-height: 1.5;
       margin-bottom: 1rem;
       flex-grow: 1;
     }}
@@ -348,7 +390,7 @@ def render_dashboard_html(loaded_packs: dict[str, Any]) -> str:
     </section>
 
     <section>
-      <h2 class="section-title">🎭 Available Action Tools & Media Assets</h2>
+      <h2 class="section-title">🎭 Available Actions</h2>
       <div class="cards-grid">
         {cards_html}
       </div>
