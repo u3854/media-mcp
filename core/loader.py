@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from core.archive import extract_pack_archive, is_archive_file
 from core.models import (
     ActionDefinition,
     ActionParameter,
@@ -197,18 +198,33 @@ def {py_func_name}({signature_params}) -> str:
 
 
 def load_pack(
-    pack_dir: Path,
+    pack_source: Path,
     host: str = "127.0.0.1",
     port: int = 8088,
     namespace_prefix: bool = True,
+    passkey: str | None = None,
 ) -> LoadedPack:
-    """Load, validate, and synthesize tools for a single action pack."""
+    """Load, validate, and synthesize tools for a single action pack (directory or .mm/.zip archive)."""
+    pack_source = pack_source.resolve()
+    temp_dir_handle = None
+
+    if pack_source.is_file():
+        if is_archive_file(pack_source):
+            pack_dir, temp_dir_handle = extract_pack_archive(pack_source, passkey=passkey)
+            logger.info("Extracted pack archive '%s' to temporary directory %s", pack_source.name, pack_dir)
+        else:
+            raise ValueError(f"File '{pack_source}' is not a recognized pack archive (.mm or .zip)")
+    elif pack_source.is_dir():
+        pack_dir = pack_source
+    else:
+        raise FileNotFoundError(f"Pack source not found: {pack_source}")
+
     manifest_file, media_dir = validate_pack_dir(pack_dir)
     manifest = load_manifest(manifest_file)
 
     errors = validate_pack_contents(manifest, media_dir)
     if errors:
-        raise ValueError(f"Pack validation failed for {pack_dir}:\n  - " + "\n  - ".join(errors))
+        raise ValueError(f"Pack validation failed for {pack_source}:\n  - " + "\n  - ".join(errors))
 
     tools: list[SynthesizedTool] = []
     for action in manifest.actions:
@@ -238,13 +254,14 @@ def load_pack(
         except Exception as e:
             logger.warning("Failed to read system_prompt.txt in %s: %s", pack_dir, e)
 
-    logger.info("Loaded pack '%s' (%d actions) from %s", manifest.name, len(tools), pack_dir)
+    logger.info("Loaded pack '%s' (%d actions) from %s", manifest.name, len(tools), pack_source)
     return LoadedPack(
         manifest=manifest,
         root_dir=pack_dir,
         media_dir=media_dir,
         tools=tools,
         system_prompt=system_prompt,
+        temp_dir=temp_dir_handle,
     )
 
 
@@ -258,9 +275,9 @@ def discover_all_packs(
     discovered: dict[str, LoadedPack] = {}
     candidate_paths: list[Path] = []
 
-    # Add explicit pack paths
+    # Add explicit pack paths (directories or .mm / .zip archive files)
     for p in pack_paths:
-        if p.is_dir() and p not in candidate_paths:
+        if (p.is_dir() or (p.is_file() and is_archive_file(p))) and p not in candidate_paths:
             candidate_paths.append(p)
 
     # Add subdirectories from packs directories

@@ -9,6 +9,8 @@ import re
 import sys
 from pathlib import Path
 
+from core.archive import create_pack_archive, extract_pack_archive, is_archive_file
+from core.config import get_media_passkey
 from core.loader import load_manifest, validate_pack_contents, validate_pack_dir
 
 SAMPLE_PACK_MANIFEST = {
@@ -113,10 +115,83 @@ def handle_create(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_export(args: argparse.Namespace) -> int:
+    """Export an Action Pack directory to a .mm (or .zip) archive, optionally encrypted."""
+    target_dir = Path(args.path).resolve()
+    if not target_dir.is_dir():
+        sys.stderr.write(f"✗ Export Failed: Pack directory not found: {target_dir}\n")
+        return 1
+
+    try:
+        manifest_file, media_dir = validate_pack_dir(target_dir)
+        manifest = load_manifest(manifest_file)
+        errors = validate_pack_contents(manifest, media_dir)
+        if errors:
+            sys.stderr.write(f"✗ Validation Failed before export with {len(errors)} error(s):\n")
+            for err in errors:
+                sys.stderr.write(f"  - {err}\n")
+            return 1
+    except Exception as e:
+        sys.stderr.write(f"✗ Export Failed: Invalid pack structure: {e}\n")
+        return 1
+
+    # Output file path
+    if args.out:
+        output_file = Path(args.out).resolve()
+    else:
+        output_file = target_dir.parent / f"{manifest.name}.mm"
+
+    # Encryption configuration
+    encrypt = bool(args.encrypt)
+    passkey = getattr(args, "key", None) or get_media_passkey()
+    if encrypt and not passkey:
+        sys.stderr.write(
+            "✗ Error: Encryption requested but no passkey found. "
+            "Set MEDIA_PASSKEY in .env or pass --key.\n"
+        )
+        return 1
+
+    sys.stderr.write(f"Packaging pack '{manifest.name}' from {target_dir}...\n")
+    try:
+        out_path = create_pack_archive(
+            pack_dir=target_dir,
+            output_file=output_file,
+            encrypt=encrypt,
+            passkey=passkey,
+        )
+    except Exception as e:
+        sys.stderr.write(f"✗ Export Failed: {e}\n")
+        return 1
+
+    file_size = out_path.stat().st_size
+    mode_desc = "Encrypted (.mm archive)" if encrypt else "Plain (.mm archive)"
+    sys.stderr.write(f"✓ Exported pack '{manifest.name}' to {out_path}\n")
+    sys.stderr.write(f"  Format: {mode_desc}\n")
+    sys.stderr.write(f"  Size: {file_size} bytes\n")
+    return 0
+
+
 def handle_validate(args: argparse.Namespace) -> int:
     """Validate a pack manifest and verify all referenced media assets exist."""
-    target_dir = Path(args.path).resolve()
-    sys.stderr.write(f"Validating action pack at {target_dir}...\n")
+    target_path = Path(args.path).resolve()
+    passkey = getattr(args, "key", None) or get_media_passkey()
+
+    if target_path.is_file():
+        if not is_archive_file(target_path):
+            sys.stderr.write(f"✗ Validation Failed: File is not a recognized pack archive: {target_path}\n")
+            return 1
+        sys.stderr.write(f"Extracting and validating archive at {target_path}...\n")
+        try:
+            target_dir, _ = extract_pack_archive(target_path, passkey=passkey)
+        except Exception as e:
+            sys.stderr.write(f"✗ Extraction Failed: {e}\n")
+            return 1
+    elif target_path.is_dir():
+        target_dir = target_path
+        sys.stderr.write(f"Validating action pack at {target_dir}...\n")
+    else:
+        sys.stderr.write(f"✗ Validation Failed: Path not found: {target_path}\n")
+        return 1
 
     try:
         manifest_file, media_dir = validate_pack_dir(target_dir)
@@ -146,7 +221,8 @@ def handle_validate(args: argparse.Namespace) -> int:
         except Exception:
             prompt_info = "Present (unreadable)"
 
-    sys.stderr.write(f"✓ Pack '{manifest.name}' (v{manifest.version}) is valid!\n")
+    archive_tag = f" (Archive: {target_path.name})" if target_path.is_file() else ""
+    sys.stderr.write(f"✓ Pack '{manifest.name}' (v{manifest.version}){archive_tag} is valid!\n")
     sys.stderr.write(f"  Description: {manifest.description or '(No description)'}\n")
     sys.stderr.write(f"  System Prompt: {prompt_info}\n")
     sys.stderr.write(f"  Actions ({len(manifest.actions)}):\n")
@@ -173,7 +249,15 @@ def main() -> None:
 
     # validate
     validate_parser = subparsers.add_parser("validate", help="Validate an Action Pack manifest and media files")
-    validate_parser.add_argument("path", help="Path to the pack directory to validate")
+    validate_parser.add_argument("path", help="Path to the pack directory or archive (.mm / .zip) to validate")
+    validate_parser.add_argument("--key", "-k", help="Passkey to decrypt archive if encrypted")
+
+    # export
+    export_parser = subparsers.add_parser("export", help="Export an Action Pack to a .mm archive")
+    export_parser.add_argument("path", help="Path to the pack directory to export")
+    export_parser.add_argument("--out", "-o", help="Destination path for the archive (defaults to <pack_name>.mm)")
+    export_parser.add_argument("--encrypt", "-e", action="store_true", help="Encrypt the archive using MEDIA_PASSKEY or --key")
+    export_parser.add_argument("--key", "-k", help="Passkey to use for encryption (overrides MEDIA_PASSKEY in .env)")
 
     args = parser.parse_args()
 
@@ -181,6 +265,8 @@ def main() -> None:
         sys.exit(handle_create(args))
     elif args.command == "validate":
         sys.exit(handle_validate(args))
+    elif args.command == "export":
+        sys.exit(handle_export(args))
 
 
 if __name__ == "__main__":

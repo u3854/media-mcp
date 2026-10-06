@@ -8,6 +8,26 @@ import socket
 import sys
 from pathlib import Path
 
+try:
+    import dotenv
+    # Search for .env starting from current working directory up to parents
+    env_file = dotenv.find_dotenv(usecwd=True)
+    if env_file:
+        dotenv.load_dotenv(env_file)
+    else:
+        # Fallback to repository root
+        repo_env = Path(__file__).resolve().parents[1] / ".env"
+        if repo_env.is_file():
+            dotenv.load_dotenv(repo_env)
+except ImportError:
+    pass
+
+
+def get_media_passkey() -> str | None:
+    """Return encryption passkey from MEDIA_PASSKEY env var / .env if present."""
+    val = os.environ.get("MEDIA_PASSKEY", "").strip()
+    return val or None
+
 
 def setup_logging(level: int = logging.INFO) -> None:
     """Configure logging to write strictly to sys.stderr to avoid polluting MCP stdio."""

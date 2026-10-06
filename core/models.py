@@ -78,12 +78,14 @@ class LoadedPack:
         media_dir: Path,
         tools: list[SynthesizedTool] | None = None,
         system_prompt: str | None = None,
+        temp_dir: Any = None,
     ) -> None:
         self.manifest = manifest
         self.root_dir = root_dir
         self.media_dir = media_dir
         self.tools: list[SynthesizedTool] = tools or []
         self.system_prompt = system_prompt
+        self._temp_dir = temp_dir
 
     @property
     def name(self) -> str:
