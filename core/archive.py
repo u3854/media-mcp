@@ -103,6 +103,18 @@ def is_archive_file(path: Path) -> bool:
         return False
 
 
+def is_archive_encrypted(path: Path) -> bool:
+    """Determine whether an archive file is encrypted with MAGIC_HEADER."""
+    if not path.is_file():
+        return False
+    try:
+        with open(path, "rb") as f:
+            header = f.read(len(MAGIC_HEADER))
+            return header.startswith(MAGIC_HEADER)
+    except Exception:
+        return False
+
+
 def pack_dir_to_zip_bytes(pack_dir: Path) -> bytes:
     """Package an action pack directory into in-memory zip bytes."""
     pack_dir = pack_dir.resolve()
@@ -147,7 +159,15 @@ def create_pack_archive(
 
     output_file = output_file.resolve()
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    output_file.write_bytes(output_bytes)
+    # Atomically replace archive using a temporary file in the same directory
+    tmp_file = output_file.with_name(f".{output_file.name}.tmp_{os.getpid()}")
+    try:
+        tmp_file.write_bytes(output_bytes)
+        tmp_file.replace(output_file)
+    except Exception:
+        if tmp_file.exists():
+            tmp_file.unlink(missing_ok=True)
+        raise
     return output_file
 
 

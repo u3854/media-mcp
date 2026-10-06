@@ -78,18 +78,103 @@ class LoadedPack:
         media_dir: Path,
         tools: list[SynthesizedTool] | None = None,
         system_prompt: str | None = None,
+        prompts: dict[str, str] | None = None,
+        active_prompt: str = "default",
+        source_path: Path | None = None,
+        is_encrypted: bool = False,
+        passkey: str | None = None,
         temp_dir: Any = None,
     ) -> None:
         self.manifest = manifest
         self.root_dir = root_dir
         self.media_dir = media_dir
         self.tools: list[SynthesizedTool] = tools or []
-        self.system_prompt = system_prompt
         self._temp_dir = temp_dir
+        self.source_path = source_path
+        self.is_encrypted = is_encrypted
+        self.passkey = passkey
+
+        self.prompts: dict[str, str] = dict(prompts) if prompts else {}
+        if system_prompt and "default" not in self.prompts:
+            self.prompts["default"] = system_prompt
+
+        if self.prompts:
+            self.active_prompt = active_prompt if active_prompt in self.prompts else next(iter(self.prompts))
+        else:
+            self.prompts["default"] = ""
+            self.active_prompt = "default"
+
+    @property
+    def system_prompt(self) -> str | None:
+        return self.prompts.get(self.active_prompt) or (next(iter(self.prompts.values()), None) if self.prompts else None)
+
+    @system_prompt.setter
+    def system_prompt(self, val: str | None) -> None:
+        if val is not None:
+            self.prompts[self.active_prompt] = val
+        elif self.active_prompt in self.prompts:
+            del self.prompts[self.active_prompt]
+
+    def save_prompt(self, name: str, content: str, set_active: bool = True) -> None:
+        """Save or create a prompt file under prompts/ and persist to archive if needed."""
+        from core.archive import create_pack_archive, is_archive_file
+
+        name = name.strip()
+        if not name:
+            raise ValueError("Prompt name cannot be empty")
+
+        self.prompts[name] = content
+        if set_active:
+            self.active_prompt = name
+
+        prompts_dir = self.root_dir / "prompts"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        (prompts_dir / f"{name}.txt").write_text(content, encoding="utf-8")
+
+        if self.source_path and is_archive_file(self.source_path):
+            create_pack_archive(
+                pack_dir=self.root_dir,
+                output_file=self.source_path,
+                encrypt=self.is_encrypted,
+                passkey=self.passkey,
+            )
+
+    def delete_prompt(self, name: str) -> bool:
+        """Delete a prompt file from prompts/ and persist to archive if needed."""
+        from core.archive import create_pack_archive, is_archive_file
+
+        if name not in self.prompts:
+            return False
+        if len(self.prompts) <= 1:
+            raise ValueError("Cannot delete the only remaining prompt")
+
+        del self.prompts[name]
+        if self.active_prompt == name:
+            self.active_prompt = "default" if "default" in self.prompts else next(iter(self.prompts), "")
+
+        prompt_file = self.root_dir / "prompts" / f"{name}.txt"
+        if prompt_file.is_file():
+            prompt_file.unlink()
+
+        if self.source_path and is_archive_file(self.source_path):
+            create_pack_archive(
+                pack_dir=self.root_dir,
+                output_file=self.source_path,
+                encrypt=self.is_encrypted,
+                passkey=self.passkey,
+            )
+        return True
+
+    def set_active_prompt(self, name: str) -> bool:
+        """Set the active prompt name."""
+        if name in self.prompts:
+            self.active_prompt = name
+            return True
+        return False
 
     @property
     def name(self) -> str:
         return self.manifest.name
 
     def __repr__(self) -> str:
-        return f"<LoadedPack name={self.name!r} actions={len(self.manifest.actions)} path={self.root_dir}>"
+        return f"<LoadedPack name={self.name!r} actions={len(self.manifest.actions)} prompts={list(self.prompts.keys())} path={self.root_dir}>"

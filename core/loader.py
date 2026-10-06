@@ -8,7 +8,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from core.archive import extract_pack_archive, is_archive_file
+from core.archive import extract_pack_archive, is_archive_encrypted, is_archive_file
+from core.config import get_media_passkey
 from core.models import (
     ActionDefinition,
     ActionParameter,
@@ -207,10 +208,13 @@ def load_pack(
     """Load, validate, and synthesize tools for a single action pack (directory or .mm/.zip archive)."""
     pack_source = pack_source.resolve()
     temp_dir_handle = None
+    is_encrypted = False
+    effective_passkey = passkey or get_media_passkey()
 
     if pack_source.is_file():
         if is_archive_file(pack_source):
-            pack_dir, temp_dir_handle = extract_pack_archive(pack_source, passkey=passkey)
+            is_encrypted = is_archive_encrypted(pack_source)
+            pack_dir, temp_dir_handle = extract_pack_archive(pack_source, passkey=effective_passkey)
             logger.info("Extracted pack archive '%s' to temporary directory %s", pack_source.name, pack_dir)
         else:
             raise ValueError(f"File '{pack_source}' is not a recognized pack archive (.mm or .zip)")
@@ -245,22 +249,48 @@ def load_pack(
         )
         tools.append(tool)
 
-    system_prompt: str | None = None
-    prompt_file = pack_dir / "system_prompt.txt"
-    if prompt_file.is_file():
-        try:
-            system_prompt = prompt_file.read_text(encoding="utf-8").strip()
-            logger.info("Loaded system prompt for pack '%s' (%d chars)", manifest.name, len(system_prompt))
-        except Exception as e:
-            logger.warning("Failed to read system_prompt.txt in %s: %s", pack_dir, e)
+    prompts: dict[str, str] = {}
+    prompts_dir = pack_dir / "prompts"
+    if prompts_dir.is_dir():
+        for p_file in sorted(prompts_dir.glob("*.txt")):
+            if p_file.is_file():
+                try:
+                    prompts[p_file.stem] = p_file.read_text(encoding="utf-8").strip()
+                except Exception as e:
+                    logger.warning("Failed to read prompt %s in %s: %s", p_file.name, pack_dir, e)
 
-    logger.info("Loaded pack '%s' (%d actions) from %s", manifest.name, len(tools), pack_source)
+    # Legacy migration: If system_prompt.txt exists at root and prompts is empty, migrate to prompts/default.txt
+    legacy_prompt_file = pack_dir / "system_prompt.txt"
+    if legacy_prompt_file.is_file() and not prompts:
+        try:
+            legacy_text = legacy_prompt_file.read_text(encoding="utf-8").strip()
+            prompts["default"] = legacy_text
+            prompts_dir.mkdir(parents=True, exist_ok=True)
+            (prompts_dir / "default.txt").write_text(legacy_text, encoding="utf-8")
+            try:
+                legacy_prompt_file.unlink()
+            except Exception:
+                pass
+            logger.info("Migrated legacy system_prompt.txt to prompts/default.txt for '%s'", manifest.name)
+        except Exception as e:
+            logger.warning("Failed to migrate legacy system_prompt.txt in %s: %s", pack_dir, e)
+
+    if not prompts:
+        prompts["default"] = ""
+
+    active_prompt = "default" if "default" in prompts else next(iter(prompts))
+    logger.info("Loaded pack '%s' (%d actions, %d prompts) from %s", manifest.name, len(tools), len(prompts), pack_source)
+
     return LoadedPack(
         manifest=manifest,
         root_dir=pack_dir,
         media_dir=media_dir,
         tools=tools,
-        system_prompt=system_prompt,
+        prompts=prompts,
+        active_prompt=active_prompt,
+        source_path=pack_source,
+        is_encrypted=is_encrypted,
+        passkey=effective_passkey,
         temp_dir=temp_dir_handle,
     )
 

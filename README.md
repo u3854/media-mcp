@@ -10,13 +10,14 @@ Includes an embedded **Action Pack Dashboard & System Prompt Hub** on port `8088
 
 An Action Pack is a self-contained directory containing:
 * `pack.json`: Manifest defining action tools, parameters, descriptions, and media file references.
-* `system_prompt.txt`: Optional system prompt / persona instructing the model when and how to call the actions.
+* `prompts/`: Folder containing prompt text files (`default.txt`, `roleplay.txt`, etc.). Any text file inside becomes a selectable option.
 * `media/`: Folder containing animation and image assets (`.webp`, `.gif`, `.png`, etc.).
 
 ```text
 my-action-pack/
 ├── pack.json             # Manifest and action definitions
-├── system_prompt.txt     # Custom system prompt for chat sessions
+├── prompts/              # Action pack prompt presets
+│   └── default.txt       # Default system prompt
 └── media/
     ├── README.txt
     └── cat.webp          # Animation assets
@@ -26,7 +27,7 @@ my-action-pack/
 ```bash
 .venv/bin/python cli.py create ~/.media-packs/reactions --name reactions
 ```
-This automatically scaffolds `pack.json`, a starter `system_prompt.txt`, and the `media/` directory.
+This automatically scaffolds `pack.json`, `prompts/default.txt`, and the `media/` directory.
 
 ### Validate Your Pack
 Drop your `.webp` images into `media/`, customize your actions and prompt, and validate:

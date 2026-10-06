@@ -95,8 +95,10 @@ def handle_create(args: argparse.Namespace) -> int:
                 "Refer to them by filename in pack.json (e.g. 'attack.webp').\n"
             )
 
-    # Add starter system_prompt.txt
-    prompt_path = target_dir / "system_prompt.txt"
+    # Add starter prompts/default.txt
+    prompts_dir = target_dir / "prompts"
+    prompts_dir.mkdir(exist_ok=True)
+    prompt_path = prompts_dir / "default.txt"
     if not prompt_path.exists():
         with open(prompt_path, "w", encoding="utf-8") as f:
             f.write(
@@ -107,10 +109,10 @@ def handle_create(args: argparse.Namespace) -> int:
     sys.stderr.write(f"✓ Created action pack '{pack_name}' at {target_dir}\n")
     sys.stderr.write(f"  - Manifest: {manifest_path}\n")
     sys.stderr.write(f"  - Media directory: {media_dir}\n")
-    sys.stderr.write(f"  - System prompt: {prompt_path}\n")
+    sys.stderr.write(f"  - Default prompt: {prompt_path}\n")
     sys.stderr.write("\nNext steps:\n")
     sys.stderr.write("  1. Add WebP images to the media/ folder (e.g. attack.webp, defend.webp)\n")
-    sys.stderr.write("  2. Customize system_prompt.txt with model instructions\n")
+    sys.stderr.write("  2. Customize prompts in prompts/ (e.g. prompts/default.txt)\n")
     sys.stderr.write(f"  3. Validate your pack: python cli.py validate {target_dir}\n")
     return 0
 
@@ -212,19 +214,21 @@ def handle_validate(args: argparse.Namespace) -> int:
             sys.stderr.write(f"  - {err}\n")
         return 1
 
-    prompt_file = target_dir / "system_prompt.txt"
-    prompt_info = "Not present"
-    if prompt_file.is_file():
-        try:
-            content_len = len(prompt_file.read_text(encoding="utf-8").strip())
-            prompt_info = f"Present ({content_len} chars)"
-        except Exception:
-            prompt_info = "Present (unreadable)"
+    prompts_dir = target_dir / "prompts"
+    prompt_files = list(prompts_dir.glob("*.txt")) if prompts_dir.is_dir() else []
+    if prompt_files:
+        prompt_info = f"{len(prompt_files)} prompt(s): {', '.join(p.stem for p in sorted(prompt_files))}"
+    else:
+        legacy_prompt = target_dir / "system_prompt.txt"
+        if legacy_prompt.is_file():
+            prompt_info = "Legacy system_prompt.txt (will migrate to prompts/default.txt)"
+        else:
+            prompt_info = "None"
 
     archive_tag = f" (Archive: {target_path.name})" if target_path.is_file() else ""
     sys.stderr.write(f"✓ Pack '{manifest.name}' (v{manifest.version}){archive_tag} is valid!\n")
     sys.stderr.write(f"  Description: {manifest.description or '(No description)'}\n")
-    sys.stderr.write(f"  System Prompt: {prompt_info}\n")
+    sys.stderr.write(f"  Prompts: {prompt_info}\n")
     sys.stderr.write(f"  Actions ({len(manifest.actions)}):\n")
     for act in manifest.actions:
         param_summary = ", ".join(
